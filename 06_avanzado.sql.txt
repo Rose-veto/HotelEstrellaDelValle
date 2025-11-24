@@ -37,7 +37,6 @@ BEGIN
     RETURN @PrecioNoche * @Noches;
 
 END;
-
 GO
  
 -- Uso de la función: SELECT dbo.fn_CalcularMonto(120.00, 5);
@@ -80,7 +79,6 @@ BEGIN
 END;
 
 GO
-
 -- Uso: EXEC sp_RegistrarReserva 1, 6, '2026-08-01', '2026-08-03';
  
  
@@ -117,15 +115,11 @@ BEGIN
         RAISERROR('Cliente no encontrado.', 16, 1);
 
 END;
-
 GO
-
 -- Uso: EXEC sp_ActualizarDatosCliente 1, '999-0000', 'ana.nueva@mail.com';
  
  
 -- SP 3: sp_ReporteIngresosPorMes
-
--- Genera un reporte de ingresos totales agrupados por mes y año.
 
 CREATE PROCEDURE sp_ReporteIngresosPorMes
 
@@ -154,6 +148,8 @@ END;
 GO
 
 -- Uso: EXEC sp_ReporteIngresosPorMes;
+
+
  
   -- ** Vistas **
  
@@ -432,4 +428,3 @@ GROUP BY CTE.Anio, CTE.Mes, H.Numero
 
 ORDER BY CTE.Anio, CTE.Mes, H.Numero;
 
- 
