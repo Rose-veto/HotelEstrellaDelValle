@@ -1,0 +1,435 @@
+--Bases de Datos Avanzado
+
+-- **  Funciones **
+ 
+-- Función 1: fn_CalcularNoches
+
+-- Calcula el número de noches entre dos fechas.
+
+CREATE FUNCTION fn_CalcularNoches (@FechaEntrada DATE, @FechaSalida DATE)
+
+RETURNS INT
+
+AS
+
+BEGIN
+
+    RETURN DATEDIFF(DAY, @FechaEntrada, @FechaSalida);
+
+END;
+
+GO
+
+-- Uso de la función: SELECT dbo.fn_CalcularNoches('2025-11-20', '2025-11-22');
+ 
+-- Función 2: fn_CalcularMonto
+
+-- Calcula el monto total de una reserva.
+
+CREATE FUNCTION fn_CalcularMonto (@PrecioNoche DECIMAL(10, 2), @Noches INT)
+
+RETURNS DECIMAL(10, 2)
+
+AS
+
+BEGIN
+
+    RETURN @PrecioNoche * @Noches;
+
+END;
+
+GO
+ 
+-- Uso de la función: SELECT dbo.fn_CalcularMonto(120.00, 5);
+ 
+ 
+-- **  Procedimientos Almacenados **
+ 
+-- SP 1: sp_RegistrarReserva
+
+-- Registra una reserva y usa la función para calcular noches y monto.
+
+CREATE PROCEDURE sp_RegistrarReserva
+
+    @IdCliente INT,
+
+    @IdHabitacion INT,
+
+    @FechaEntrada DATE,
+
+    @FechaSalida DATE
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+ 
+    DECLARE @Noches INT = dbo.fn_CalcularNoches(@FechaEntrada, @FechaSalida);
+
+    DECLARE @Precio DECIMAL(10, 2) = (SELECT PrecioPorNoche FROM Habitaciones WHERE IdHabitacion = @IdHabitacion);
+
+    DECLARE @MontoTotal DECIMAL(10, 2) = dbo.fn_CalcularMonto(@Precio, @Noches);
+ 
+    INSERT INTO Reservaciones (IdCliente, IdHabitacion, FechaEntrada, FechaSalida, CantidadNoches, MontoTotal)
+
+    VALUES (@IdCliente, @IdHabitacion, @FechaEntrada, @FechaSalida, @Noches, @MontoTotal);
+ 
+    SELECT SCOPE_IDENTITY() AS IdReserva; -- Devuelve el ID de la nueva reserva
+
+END;
+
+GO
+
+-- Uso: EXEC sp_RegistrarReserva 1, 6, '2026-08-01', '2026-08-03';
+ 
+ 
+-- SP 2: sp_ActualizarDatosCliente
+
+-- Actualiza teléfono y/o email de un cliente por su ID.
+
+CREATE PROCEDURE sp_ActualizarDatosCliente
+
+    @IdCliente INT,
+
+    @TelefonoNuevo VARCHAR(15) = NULL,
+
+    @EmailNuevo VARCHAR(100) = NULL
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+    UPDATE Clientes
+
+    SET 
+
+        Telefono = ISNULL(@TelefonoNuevo, Telefono),
+
+        Email = ISNULL(@EmailNuevo, Email)
+
+    WHERE IdCliente = @IdCliente;
+ 
+    IF @@ROWCOUNT = 0
+
+        RAISERROR('Cliente no encontrado.', 16, 1);
+
+END;
+
+GO
+
+-- Uso: EXEC sp_ActualizarDatosCliente 1, '999-0000', 'ana.nueva@mail.com';
+ 
+ 
+-- SP 3: sp_ReporteIngresosPorMes
+
+-- Genera un reporte de ingresos totales agrupados por mes y año.
+
+CREATE PROCEDURE sp_ReporteIngresosPorMes
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+    SELECT 
+
+        YEAR(FechaPago) AS Anio,
+
+        MONTH(FechaPago) AS Mes,
+
+        SUM(Monto) AS IngresoTotal
+
+    FROM Pagos
+
+    GROUP BY YEAR(FechaPago), MONTH(FechaPago)
+
+    ORDER BY Anio, Mes;
+
+END;
+
+GO
+
+-- Uso: EXEC sp_ReporteIngresosPorMes;
+ 
+  -- ** Vistas **
+ 
+-- Vista 1: vw_ReservasDetalle
+
+-- Muestra el detalle completo de las reservas (quién, qué habitación, cuánto).
+
+CREATE VIEW vw_ReservasDetalle AS
+
+SELECT
+
+    R.IdReserva,
+
+    C.Nombre + ' ' + C.Apellidos AS Cliente,
+
+    H.Numero AS Habitacion,
+
+    T.NombreTipo AS TipoHabitacion,
+
+    R.FechaEntrada,
+
+    R.FechaSalida,
+
+    R.CantidadNoches,
+
+    R.MontoTotal
+
+FROM Reservaciones R
+
+JOIN Clientes C ON R.IdCliente = C.IdCliente
+
+JOIN Habitaciones H ON R.IdHabitacion = H.IdHabitacion
+
+JOIN TiposHabitacion T ON H.IdTipoHabitacion = T.IdTipoHabitacion;
+
+GO
+ 
+-- Vista 2: vw_PagosPorCliente
+
+-- Agrupa los pagos para mostrar el total pagado por cada cliente.
+
+CREATE VIEW vw_PagosPorCliente AS
+
+SELECT
+
+    C.IdCliente,
+
+    C.Nombre + ' ' + C.Apellidos AS Cliente,
+
+    COUNT(P.IdPago) AS CantidadPagos,
+
+    SUM(P.Monto) AS TotalPagado
+
+FROM Pagos P
+
+JOIN Reservaciones R ON P.IdReserva = R.IdReserva
+
+JOIN Clientes C ON R.IdCliente = C.IdCliente
+
+GROUP BY C.IdCliente, C.Nombre, C.Apellidos;
+
+GO
+ 
+ 
+-- Vista 3: vw_IngresosHabitaciones
+
+-- Muestra la ocupación e ingresos generados por cada tipo de habitación.
+
+CREATE VIEW vw_IngresosHabitaciones AS
+
+SELECT
+
+    T.NombreTipo AS TipoHabitacion,
+
+    COUNT(R.IdReserva) AS TotalReservas,
+
+    SUM(R.MontoTotal) AS IngresoGenerado
+
+FROM Reservaciones R
+
+JOIN Habitaciones H ON R.IdHabitacion = H.IdHabitacion
+
+JOIN TiposHabitacion T ON H.IdTipoHabitacion = T.IdTipoHabitacion
+
+GROUP BY T.NombreTipo;
+
+GO
+ 
+ 
+-- **  Triggers **
+
+-- Trigger 1: Actualiza CantidadNoches y MontoTotal en Reservaciones (después de INSERT)
+
+CREATE TRIGGER tr_Reservaciones_AfterInsert
+
+ON Reservaciones
+
+AFTER INSERT
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+    -- Actualiza las columnas calculadas en la tabla Reservaciones
+
+    UPDATE R
+
+    SET
+
+        R.CantidadNoches = DATEDIFF(DAY, I.FechaEntrada, I.FechaSalida),
+
+        R.MontoTotal = DATEDIFF(DAY, I.FechaEntrada, I.FechaSalida) * H.PrecioPorNoche
+
+    FROM Reservaciones R
+
+    INNER JOIN inserted I ON R.IdReserva = I.IdReserva -- 'inserted' contiene las filas recién insertadas
+
+    INNER JOIN Habitaciones H ON I.IdHabitacion = H.IdHabitacion;
+
+END;
+
+GO
+ 
+ 
+-- Trigger 2: Registro de Log cada vez que se modifique una habitación (INSERT, UPDATE, DELETE)
+
+CREATE TRIGGER tr_Habitaciones_Log
+
+ON Habitaciones
+
+AFTER INSERT, UPDATE, DELETE
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+    -- Para DELETE
+
+    IF EXISTS (SELECT * FROM deleted) AND NOT EXISTS (SELECT * FROM inserted)
+
+    BEGIN
+
+        INSERT INTO LogHabitaciones (IdHabitacion, TipoCambio, DetallesCambio)
+
+        SELECT 
+
+            d.IdHabitacion, 
+
+            'DELETE', 
+
+            'Habitación eliminada: ' + d.Numero + ', Precio: ' + CAST(d.PrecioPorNoche AS VARCHAR)
+
+        FROM deleted d;
+
+    END
+
+    -- Para INSERT
+
+    ELSE IF EXISTS (SELECT * FROM inserted) AND NOT EXISTS (SELECT * FROM deleted)
+
+    BEGIN
+
+        INSERT INTO LogHabitaciones (IdHabitacion, TipoCambio, DetallesCambio)
+
+        SELECT 
+
+            i.IdHabitacion, 
+
+            'INSERT', 
+
+            'Habitación insertada: ' + i.Numero + ', Precio: ' + CAST(i.PrecioPorNoche AS VARCHAR)
+
+        FROM inserted i;
+
+    END
+
+    -- Para UPDATE (solo si hay un cambio significativo en el precio o tipo)
+
+    ELSE IF EXISTS (SELECT * FROM inserted) AND EXISTS (SELECT * FROM deleted)
+
+    BEGIN
+
+        INSERT INTO LogHabitaciones (IdHabitacion, TipoCambio, DetallesCambio)
+
+        SELECT 
+
+            i.IdHabitacion, 
+
+            'UPDATE', 
+
+            'Cambio. Precio anterior: ' + CAST(d.PrecioPorNoche AS VARCHAR) + ', Nuevo precio: ' + CAST(i.PrecioPorNoche AS VARCHAR)
+
+        FROM inserted i
+
+        JOIN deleted d ON i.IdHabitacion = d.IdHabitacion
+
+        WHERE i.PrecioPorNoche <> d.PrecioPorNoche OR i.IdTipoHabitacion <> d.IdTipoHabitacion;
+
+    END
+
+END;
+
+GO
+ 
+ 
+-- **CTEs (Common Table Expressions) **
+ 
+-- CTE 1: Calcular ingresos totales por cliente (usando CTE)
+
+WITH IngresosClienteCTE AS (
+
+    SELECT
+
+        R.IdCliente,
+
+        P.Monto
+
+    FROM Pagos P
+
+    JOIN Reservaciones R ON P.IdReserva = R.IdReserva
+
+)
+
+SELECT 
+
+    C.Nombre + ' ' + C.Apellidos AS Cliente,
+
+    SUM(CTE.Monto) AS IngresoTotalGenerado
+
+FROM IngresosClienteCTE CTE
+
+JOIN Clientes C ON CTE.IdCliente = C.IdCliente
+
+GROUP BY C.Nombre, C.Apellidos
+
+ORDER BY IngresoTotalGenerado DESC;
+ 
+ 
+-- CTE 2: Calcular ocupación de habitaciones por mes
+
+WITH OcupacionMensualCTE AS (
+
+    SELECT
+
+        IdHabitacion,
+
+        YEAR(FechaEntrada) AS Anio,
+
+        MONTH(FechaEntrada) AS Mes,
+
+        CantidadNoches
+
+    FROM Reservaciones
+
+)
+
+SELECT
+
+    CTE.Anio,
+
+    CTE.Mes,
+
+    H.Numero AS Habitacion,
+
+    SUM(CTE.CantidadNoches) AS NochesOcupadas
+
+FROM OcupacionMensualCTE CTE
+
+JOIN Habitaciones H ON CTE.IdHabitacion = H.IdHabitacion
+
+GROUP BY CTE.Anio, CTE.Mes, H.Numero
+
+ORDER BY CTE.Anio, CTE.Mes, H.Numero;
+
+ 
