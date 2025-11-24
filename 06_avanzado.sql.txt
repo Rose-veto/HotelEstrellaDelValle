@@ -1,0 +1,91 @@
+--Bases de Datos Avanzado
+-- **  Funciones **
+ 
+-- Función 1: fn_CalcularNoches
+-- Calcula el número de noches entre dos fechas.
+CREATE FUNCTION fn_CalcularNoches (@FechaEntrada DATE, @FechaSalida DATE)
+RETURNS INT
+AS
+BEGIN
+    RETURN DATEDIFF(DAY, @FechaEntrada, @FechaSalida);
+END;
+GO
+-- Uso de la función: SELECT dbo.fn_CalcularNoches('2025-11-20', '2025-11-22');
+ 
+-- Función 2: fn_CalcularMonto
+-- Calcula el monto total de una reserva.
+CREATE FUNCTION fn_CalcularMonto (@PrecioNoche DECIMAL(10, 2), @Noches INT)
+RETURNS DECIMAL(10, 2)
+AS
+BEGIN
+    RETURN @PrecioNoche * @Noches;
+END;
+GO
+ 
+-- Uso de la función: SELECT dbo.fn_CalcularMonto(120.00, 5);
+ 
+ 
+-- **  Procedimientos Almacenados **
+ 
+-- SP 1: sp_RegistrarReserva
+-- Registra una reserva y usa la función para calcular noches y monto.
+CREATE PROCEDURE sp_RegistrarReserva
+    @IdCliente INT,
+    @IdHabitacion INT,
+    @FechaEntrada DATE,
+    @FechaSalida DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+ 
+    DECLARE @Noches INT = dbo.fn_CalcularNoches(@FechaEntrada, @FechaSalida);
+    DECLARE @Precio DECIMAL(10, 2) = (SELECT PrecioPorNoche FROM Habitaciones WHERE IdHabitacion = @IdHabitacion);
+    DECLARE @MontoTotal DECIMAL(10, 2) = dbo.fn_CalcularMonto(@Precio, @Noches);
+ 
+    INSERT INTO Reservaciones (IdCliente, IdHabitacion, FechaEntrada, FechaSalida, CantidadNoches, MontoTotal)
+    VALUES (@IdCliente, @IdHabitacion, @FechaEntrada, @FechaSalida, @Noches, @MontoTotal);
+ 
+    SELECT SCOPE_IDENTITY() AS IdReserva; -- Devuelve el ID de la nueva reserva
+END;
+GO
+-- Uso: EXEC sp_RegistrarReserva 1, 6, '2026-08-01', '2026-08-03';
+ 
+ 
+-- SP 2: sp_ActualizarDatosCliente
+-- Actualiza teléfono y/o email de un cliente por su ID.
+CREATE PROCEDURE sp_ActualizarDatosCliente
+    @IdCliente INT,
+    @TelefonoNuevo VARCHAR(15) = NULL,
+    @EmailNuevo VARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE Clientes
+    SET 
+        Telefono = ISNULL(@TelefonoNuevo, Telefono),
+        Email = ISNULL(@EmailNuevo, Email)
+    WHERE IdCliente = @IdCliente;
+ 
+    IF @@ROWCOUNT = 0
+        RAISERROR('Cliente no encontrado.', 16, 1);
+END;
+GO
+-- Uso: EXEC sp_ActualizarDatosCliente 1, '999-0000', 'ana.nueva@mail.com';
+ 
+ 
+-- SP 3: sp_ReporteIngresosPorMes
+-- Genera un reporte de ingresos totales agrupados por mes y año.
+CREATE PROCEDURE sp_ReporteIngresosPorMes
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT 
+        YEAR(FechaPago) AS Anio,
+        MONTH(FechaPago) AS Mes,
+        SUM(Monto) AS IngresoTotal
+    FROM Pagos
+    GROUP BY YEAR(FechaPago), MONTH(FechaPago)
+    ORDER BY Anio, Mes;
+END;
+GO
+-- Uso: EXEC sp_ReporteIngresosPorMes;
